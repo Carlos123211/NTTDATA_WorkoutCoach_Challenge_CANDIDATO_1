@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.0 |
+| Versión | 1.1 |
 | Estado | Aprobada para implementación |
 | Autor | Carlos Gamarra |
 | Fecha | 2026-11-06 |
@@ -97,7 +97,7 @@ Ambigüedades del reto resueltas explícitamente:
 | D6 | Estado inicial: `idle`, todos los ejercicios `Pendiente`, reloj con el `repetition_time` del primer ejercicio, sin toast. **No arranca solo.** | CA-1 y baseline. |
 | D7 | `rest_time = 0` es válido: se omite el descanso y la repetición se completa al acabar el tiempo de ejercicio. | Caso límite razonable; evita un "descanso de 0 s" visible. |
 | D8 | Lista vacía: carga correcta, mensaje "No hay ejercicios", Iniciar deshabilitado. | Caso límite. |
-| D9 | Datos inválidos (tiempos/reps no enteros o fuera de rango, nombre vacío): error de carga visible, sin crash. | Caso de error. |
+| D9 | Datos inválidos (tiempos/reps no enteros o fuera de rango, `id`/nombre vacío, `id` duplicado): error de carga visible, sin crash. | Caso de error. El `id` único es necesario para `@for … track`. |
 | D10 | Reloj en formato `mm:ss`. | Corrige P8. |
 | D11 | Textos de UI en **español**, centralizados en presentation. | Coherencia con la terminología del reto (Iniciar/Pausar/Reiniciar, Pendiente/En curso/Completado). |
 
@@ -182,6 +182,7 @@ export function createExercise(props: Exercise): Exercise; // lanza InvalidExerc
 
 // domain/workout.ts
 export interface Workout { readonly exercises: readonly Exercise[]; } // puede ser vacía (D8)
+export function createWorkout(exercises: readonly Exercise[]): Workout; // ids únicos (track en @for)
 
 // domain/workout-session.ts
 export type SessionStatus = 'idle' | 'running' | 'paused' | 'finished';
@@ -350,7 +351,7 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 |---|---|---|---|
 | WS0 | Base compilable: `index.html`, `zone.js` (temporal), `@types/jasmine`, `defaultConfiguration` de serve | `fix(build): …` | ✅ Hecho |
 | WS1 | Esta spec | `docs(spec): add workout refactor specification` | ✅ Hecho |
-| WS2 | `domain/` + tests | `feat(workout-domain): …` | ⬜ |
+| WS2 | `domain/` + tests | `feat(workout-domain): …` | ✅ Hecho |
 | WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests | `feat(workout-infra): …` | ⬜ |
 | WS4 | `application/` (use case, store, tokens, puerto Ticker) + tests | `feat(workout-app): …` | ⬜ |
 | WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ⬜ |
@@ -392,7 +393,8 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 
 | Archivo | Escenarios |
 |---|---|
-| `domain/exercise.spec.ts` | Válido; reps 0; `repetitionTime` 0; `restTime` negativo; valores no enteros; nombre vacío o en blanco. |
+| `domain/exercise.spec.ts` | Válido; reps 0; `repetitionTime` 0; `restTime` negativo; valores no enteros, `NaN` o `Infinity`; `id`/nombre vacío o en blanco. |
+| `domain/workout.spec.ts` | Orden; lista vacía; no comparte el array de entrada; `id` duplicado → error. |
 | `domain/workout-session.spec.ts` | CA-1…CA-10. Recorrido completo con 2 ejercicios (secuencia exacta de estados); `start` doble; `pause` en idle; `tick` en paused/idle/finished; `reset` en mitad de un descanso; misma referencia cuando no hay cambio; inmutabilidad (el estado anterior no muta). |
 | `domain/exercise-status.spec.ts` | La tabla de §4.4 completa. |
 | `infrastructure/exercise.mapper.spec.ts` | `snake_case` → `camelCase`; lista; DTO inválido → error. |
@@ -432,7 +434,21 @@ TOTAL: 1 SUCCESS
 
 Traza de ejecución en navegador: ver §1.3.
 
-### 9.2 Tras WS5 (a completar en WS6)
+### 9.2 Tras WS2 (dominio)
+
+```text
+$ npm test
+TOTAL: 50 SUCCESS        # 1 smoke + 49 de dominio
+
+# Mutation check manual (se introduce un bug y se verifica que los tests lo detectan):
+completedRepetitions <= repetitions   →  4 FAILED
+ignorar restTime = 0                  →  1 FAILED
+
+$ grep -rnE "from '@angular|from 'rxjs" src/app/features/workout/domain   → 0 resultados
+$ grep -rnE ":\s*any\b|<any>|as any"   src/app/features/workout/domain   → 0 resultados
+```
+
+### 9.3 Tras WS5 (a completar en WS6)
 
 ```bash
 npm run build
@@ -494,3 +510,4 @@ Paso intermedio recomendado: `@ngrx/signals` (`signalStore` + `withMethods`), qu
 | Versión | Fecha | Cambio |
 |---|---|---|
 | 1.0 | 2026-11-06 | Versión inicial. |
+| 1.1 | 2026-11-06 | WS2: se añade la invariante de `id` único en `createWorkout` (D9), `workout.spec.ts` al plan de tests y la evidencia del dominio (§9.2). |
