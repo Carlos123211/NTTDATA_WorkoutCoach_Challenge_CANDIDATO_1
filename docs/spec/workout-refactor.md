@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.1 |
+| Versión | 1.2 |
 | Estado | Aprobada para implementación |
 | Autor | Carlos Gamarra |
 | Fecha | 2026-11-06 |
@@ -307,9 +307,9 @@ export interface ExerciseDto {
 
 - **`exercise.mapper.ts`:** `toExercise(dto)` renombra campos y delega la validación en `createExercise` del dominio, así las invariantes viven en un solo sitio. `toWorkout(dtos)` mapea la lista.
 - **`workout.mock.ts`:** el primer ejercicio es **Squats (3 reps, 5 s / 3 s)** para preservar el baseline, seguido de dos ejercicios más con tiempos cortos.
-- **`MockWorkoutRepository`:** implementa `WorkoutRepository` y devuelve `Promise.resolve(toWorkout(MOCK))`.
-- **`IntervalTicker`:** `setInterval` / `clearInterval`.
-- **`provideWorkoutInfrastructure()`:** registra `{ provide: WORKOUT_REPOSITORY, useClass: MockWorkoutRepository }` y `{ provide: TICKER, useClass: IntervalTicker }`.
+- **`MockWorkoutRepository`:** clase TS plana que implementa `WorkoutRepository`. Recibe los datos por constructor (por defecto, `MOCK_EXERCISES`) para poder probar datos inválidos. `getWorkout()` es `async`, de modo que un error de mapeo llega como Promise rechazada y no como excepción síncrona.
+- **`IntervalTicker`:** `setInterval` / `clearInterval`. La función de parada es idempotente.
+- **`provideWorkoutInfrastructure()`:** `makeEnvironmentProviders` con `useFactory` para ambos tokens. Los adaptadores no llevan `@Injectable` ni dependen de DI.
 
 ### 4.7 Presentation
 
@@ -352,8 +352,8 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | WS0 | Base compilable: `index.html`, `zone.js` (temporal), `@types/jasmine`, `defaultConfiguration` de serve | `fix(build): …` | ✅ Hecho |
 | WS1 | Esta spec | `docs(spec): add workout refactor specification` | ✅ Hecho |
 | WS2 | `domain/` + tests | `feat(workout-domain): …` | ✅ Hecho |
-| WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests | `feat(workout-infra): …` | ⬜ |
-| WS4 | `application/` (use case, store, tokens, puerto Ticker) + tests | `feat(workout-app): …` | ⬜ |
+| WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests. Incluye los **contratos** de application que infrastructure necesita: puerto `Ticker` y tokens DI | `feat(workout-infra): …` | ✅ Hecho |
+| WS4 | `application/` (use case, store) + tests | `feat(workout-app): …` | ⬜ |
 | WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ⬜ |
 | WS6 | README (ejecución, arquitectura, evidencia) y actualización de §9 | `docs: …` | ⬜ |
 
@@ -397,7 +397,10 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | `domain/workout.spec.ts` | Orden; lista vacía; no comparte el array de entrada; `id` duplicado → error. |
 | `domain/workout-session.spec.ts` | CA-1…CA-10. Recorrido completo con 2 ejercicios (secuencia exacta de estados); `start` doble; `pause` en idle; `tick` en paused/idle/finished; `reset` en mitad de un descanso; misma referencia cuando no hay cambio; inmutabilidad (el estado anterior no muta). |
 | `domain/exercise-status.spec.ts` | La tabla de §4.4 completa. |
-| `infrastructure/exercise.mapper.spec.ts` | `snake_case` → `camelCase`; lista; DTO inválido → error. |
+| `infrastructure/mappers/exercise.mapper.spec.ts` | `snake_case` → `camelCase`; lista y orden; lista vacía; un elemento inválido invalida la lista; `id` duplicado → error. |
+| `infrastructure/mock-workout.repository.spec.ts` | Devuelve varios ejercicios; el primero es el baseline (Squats); datos inválidos → Promise rechazada, sin excepción síncrona. |
+| `infrastructure/interval-ticker.spec.ts` | Un tick por intervalo (`jasmine.clock`); `stop()` detiene; `stop()` idempotente; varios `start()` independientes. |
+| `infrastructure/workout.providers.spec.ts` | Los tokens resuelven a los adaptadores esperados. |
 | `application/workout-session.store.spec.ts` | Con `FakeTicker` (dispara ticks a mano) y repositorio fake: carga ok / error / vacía; flujo completo; el ticker se para en pause, reset, finished y destroy; `canStart`/`canPause`. |
 | `presentation/format-seconds.spec.ts` | 0 → `00:00`; 5 → `00:05`; 75 → `01:15`. |
 | `presentation/.../exercise-item.component.spec.ts` | Etiqueta y clase CSS por estado (`setInput`). |
@@ -448,7 +451,19 @@ $ grep -rnE "from '@angular|from 'rxjs" src/app/features/workout/domain   → 0 
 $ grep -rnE ":\s*any\b|<any>|as any"   src/app/features/workout/domain   → 0 resultados
 ```
 
-### 9.3 Tras WS5 (a completar en WS6)
+### 9.3 Tras WS3 (infrastructure)
+
+```text
+$ npm test
+TOTAL: 65 SUCCESS        # +15 de infrastructure
+
+domain → @angular | rxjs | otras capas         → 0 resultados
+application → infrastructure | presentation    → 0 resultados
+any en domain/application/infrastructure       → 0 resultados
+campos snake_case en código de domain/application → 0 (solo aparecen en descripciones de tests que citan el reto)
+```
+
+### 9.4 Tras WS5 (a completar en WS6)
 
 ```bash
 npm run build
@@ -511,3 +526,4 @@ Paso intermedio recomendado: `@ngrx/signals` (`signalStore` + `withMethods`), qu
 |---|---|---|
 | 1.0 | 2026-11-06 | Versión inicial. |
 | 1.1 | 2026-11-06 | WS2: se añade la invariante de `id` único en `createWorkout` (D9), `workout.spec.ts` al plan de tests y la evidencia del dominio (§9.2). |
+| 1.2 | 2026-11-06 | WS3: el puerto `Ticker` y los tokens DI se adelantan de WS4 a WS3 (infrastructure los necesita para registrar providers). Adaptadores como clases planas con `useFactory`. Evidencia en §9.3. |
