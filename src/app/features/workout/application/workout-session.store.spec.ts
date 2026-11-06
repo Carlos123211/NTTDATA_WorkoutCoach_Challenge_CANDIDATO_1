@@ -1,4 +1,8 @@
-import { EnvironmentInjector, createEnvironmentInjector } from '@angular/core';
+import {
+  EnvironmentInjector,
+  createEnvironmentInjector,
+  provideZonelessChangeDetection,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { PUSH_UPS, SQUATS, aWorkout } from '../domain/testing/workout.fixtures';
 import { Workout } from '../domain/workout';
@@ -13,6 +17,10 @@ describe('WorkoutSessionStore', () => {
   const PUSH_UPS_DURATION = PUSH_UPS.repetitions * (PUSH_UPS.repetitionTime + PUSH_UPS.restTime); // 12
 
   let ticker: FakeTicker;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+  });
 
   function createStore(repository: WorkoutRepository): WorkoutSessionStore {
     ticker = new FakeTicker();

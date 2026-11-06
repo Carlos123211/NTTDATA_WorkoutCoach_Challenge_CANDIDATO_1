@@ -1,3 +1,4 @@
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TICKER, WORKOUT_REPOSITORY } from '../application/workout.tokens';
 import { IntervalTicker } from './interval-ticker';
@@ -6,7 +7,9 @@ import { provideWorkoutInfrastructure } from './workout.providers';
 
 describe('provideWorkoutInfrastructure', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ providers: [provideWorkoutInfrastructure()] });
+    TestBed.configureTestingModule({
+      providers: [provideZonelessChangeDetection(), provideWorkoutInfrastructure()],
+    });
   });
 
   it('binds WORKOUT_REPOSITORY to the mock adapter', () => {

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.3 |
+| Versión | 1.4 |
 | Estado | Aprobada para implementación |
 | Autor | Carlos Gamarra |
 | Fecha | 2026-11-06 |
@@ -25,7 +25,7 @@ La base **no compilaba**, contrario a lo indicado en el reto:
 | `ng build` fallaba | `Failed to read index HTML file src/index.html` | WS0 |
 | `ng test` no compilaba | `TS2593: Cannot find name 'describe'` (faltaba `@types/jasmine`) | WS0 |
 | `ng serve` fallaba | `Data path "" must have required property 'buildTarget'` | WS0 |
-| Sin `zone.js` ni modo zoneless | `bootstrapApplication` sin providers usa detección basada en zonas por defecto en Angular 20.3 (error `NG0908` si falta Zone) | WS0 (zone.js temporal) → WS5 (zoneless) |
+| Sin `zone.js` ni modo zoneless | `bootstrapApplication` sin providers usa detección basada en zonas por defecto en Angular 20.3. Confirmado en WS5: sin zone.js y sin `provideZonelessChangeDetection()` se produce `NG0908: In this configuration Angular requires Zone.js` | WS0 (zone.js temporal) → WS5 (zoneless) |
 
 ### 1.2 Deuda técnica del código legacy
 
@@ -318,10 +318,15 @@ export interface ExerciseDto {
 | Componente | Tipo | Inputs | Outputs |
 |---|---|---|---|
 | `WorkoutPageComponent` | Container (`inject(WorkoutSessionStore)`, `providers: [WorkoutSessionStore]`) | — | — |
-| `WorkoutTimerComponent` | Presentacional | `exerciseName`, `phase`, `remainingSeconds`, `completedRepetitions`, `totalRepetitions`, `canStart`, `canPause` | `start`, `pause`, `reset` |
-| `ExerciseListComponent` | Presentacional | `items` | — |
-| `ExerciseItemComponent` | Presentacional | `name`, `repetitions`, `status` | — |
+| `WorkoutTimerComponent` | Presentacional | `exerciseName`, `phase`, `remainingSeconds`, `completedRepetitions`, `totalRepetitions`, `canStart`, `canPause`, `finished` | `startClick`, `pauseClick`, `resetClick` |
+| `ExerciseListComponent` | Presentacional | `items: ExerciseWithStatus[]` | — |
+| `ExerciseItemComponent` | Presentacional | `exercise: Exercise`, `status` | — |
 | `WorkoutToastComponent` | Presentacional | `message: string \| null` | — |
+
+- **Outputs con sufijo `Click`:** `pause` y `reset` son nombres de eventos nativos del DOM; se evita la colisión (regla `no-output-native` de angular-eslint).
+- **Controles:** como en el legacy, Iniciar y Pausar se alternan en el mismo hueco. En `finished`, Iniciar se muestra deshabilitado (D3).
+- **Accesibilidad:** la notificación es una región `role="status"` / `aria-live="polite"` que existe siempre; el ejercicio en curso lleva `aria-current="step"`; el error de carga es `role="alert"` con botón Reintentar.
+- **Estilos:** tokens CSS en `:root` (`styles.css`) y estilos encapsulados por componente; `@media` para móvil.
 
 - Todos son standalone, `ChangeDetectionStrategy.OnPush`, con `@if`/`@for (… ; track item.exercise.id)` y sin `CommonModule`.
 - Los presentacionales **no inyectan nada**.
@@ -356,7 +361,7 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | WS2 | `domain/` + tests | `feat(workout-domain): …` | ✅ Hecho |
 | WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests. Incluye los **contratos** de application que infrastructure necesita: puerto `Ticker` y tokens DI | `feat(workout-infra): …` | ✅ Hecho |
 | WS4 | `application/` (use case, store) + tests | `feat(workout-app): …` | ✅ Hecho |
-| WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ⬜ |
+| WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ✅ Hecho |
 | WS6 | README (ejecución, arquitectura, evidencia) y actualización de §9 | `docs: …` | ⬜ |
 
 ---
@@ -405,10 +410,16 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | `infrastructure/workout.providers.spec.ts` | Los tokens resuelven a los adaptadores esperados. |
 | `application/load-workout.use-case.spec.ts` | Delega en el puerto; propaga el error del repositorio. |
 | `application/workout-session.store.spec.ts` | Con `FakeTicker` (dispara ticks a mano) y repositorio fake: estado previo a la carga; carga ok / error / vacía; recarga en marcha; `start` doble crea un solo ticker; transiciones por tick (CA-3…CA-6); estados por ejercicio; el ticker se para en pause, reset, finished y destroy (con `createEnvironmentInjector` + `destroy()`); `canStart`/`canPause`. |
-| `presentation/format-seconds.spec.ts` | 0 → `00:00`; 5 → `00:05`; 75 → `01:15`. |
-| `presentation/.../exercise-item.component.spec.ts` | Etiqueta y clase CSS por estado (`setInput`). |
-| `presentation/.../workout-timer.component.spec.ts` | Muestra `mm:ss` y la fase; Iniciar/Pausar según inputs; emite `start`/`pause`/`reset` al hacer clic. |
-| `app.component.spec.ts` | Smoke test con `provideZonelessChangeDetection` y la infraestructura real. |
+| `presentation/format-seconds.spec.ts` | 0, 5, 59, 60, 75, 3599; negativos y `NaN` → `00:00`. |
+| `presentation/workout.texts.spec.ts` | Mensaje por evento (incluye el nombre del siguiente ejercicio); detalle con y sin descanso. |
+| `presentation/.../exercise-item.component.spec.ts` | Nombre y detalle; etiqueta y `data-status` por estado; re-render al cambiar el input (OnPush). |
+| `presentation/.../workout-timer.component.spec.ts` | `mm:ss`, fase y contador; Iniciar/Pausar según inputs; Iniciar deshabilitado en `finished`; emite los outputs al hacer clic; no emite con Iniciar deshabilitado. |
+| `presentation/.../workout-toast.component.spec.ts` | Región live siempre presente; mensaje visible solo si existe. |
+| `presentation/.../exercise-list.component.spec.ts` | Orden de los ejercicios; `aria-current="step"` en el actual. |
+| `presentation/.../workout-page.component.spec.ts` | Integración container + store + presentacionales con `FakeTicker` y zoneless: carga sin autoarranque; recorrido completo por la UI (CA-2…CA-6); pausa y reinicio; error con Reintentar; lista vacía; ticker parado al destruir. |
+| `app.component.spec.ts` | Smoke test con el `appConfig` real (zoneless + infraestructura mock). |
+
+**Zoneless en tests:** sin zone.js, todo test que use TestBed debe registrar `provideZonelessChangeDetection()` (si no, `NG0908`).
 
 **Determinismo:** ningún test depende del reloj real. El dominio se prueba llamando a `tick()` y el store con `FakeTicker`.
 
@@ -481,18 +492,43 @@ application → infrastructure | presentation → 0 resultados
 any → solo en el código legacy (se elimina en WS5)
 ```
 
-### 9.5 Tras WS5 (a completar en WS6)
+### 9.5 Tras WS5 (presentation, zoneless) — estado final
 
-```bash
-npm run build
-npm test
-# CA-13: deben devolver 0 resultados
-grep -rnE "from '@angular|from 'rxjs" src/app/features/workout/domain
-grep -rn  "infrastructure" src/app/features/workout/presentation
-grep -rnE ":\s*any\b|<any>|as any" src/app
+```text
+$ npm run build
+Initial total | 127.91 kB | 38.28 kB (transfer)     # antes 143.45 kB: sin polyfill de zone.js
+Application bundle generation complete.
+
+$ npm test
+TOTAL: 117 SUCCESS        # +34 de presentation
 ```
 
-_Pendiente._
+Reglas de arquitectura (CA-13, CA-14), todas con 0 resultados:
+
+| Comprobación | Comando | Resultado |
+|---|---|---|
+| domain no importa Angular, RxJS ni otras capas | `grep -rnE "from '(@angular\|rxjs)\|from '\.\./(application\|infrastructure\|presentation)" src/app/features/workout/domain` | 0 |
+| application no importa infrastructure ni presentation | `grep -rnE "^import .*(infrastructure\|presentation)" src/app/features/workout/application` | 0 |
+| presentation no importa infrastructure | `grep -rn "infrastructure" src/app/features/workout/presentation` | 0 |
+| sin `any` | `grep -rnE ":\s*any\b\|<any>\|as any" src/app` | 0 |
+| presentacionales sin DI | `grep -rnE "inject\(\|constructor\(" src/app/features/workout/presentation/components` | 0 |
+| sin sintaxis legacy | `grep -rnE "\*ngIf\|\*ngFor\|ngClass\|CommonModule" src/app` | 0 |
+| todos los componentes con `OnPush` | revisión de `presentation/**/*.component.ts` | 8/8 |
+| sin zone.js | `package.json`, `angular.json` | eliminado |
+
+Verificación manual en navegador (`npm start`, Chrome, sin zone.js). La consola solo muestra el 404 de `favicon.ico`.
+
+| Momento | Pantalla |
+|---|---|
+| Carga (1,5 s sin tocar) | Squats · Ejercicio 00:05 · 0/3 · [Pendiente, Pendiente, Pendiente] · Iniciar |
+| t=1 | Ejercicio 00:04 · [En curso, Pendiente, Pendiente] · Pausar |
+| t=5 | Descanso 00:03 · "Tiempo de descanso" |
+| t=8 | Ejercicio 00:05 · 1/3 · "¡De vuelta al ejercicio!" |
+| t=24 | **Push-ups** · Ejercicio 00:04 · 0/2 · "Ejercicio completado. Siguiente: Push-ups" · [Completado, En curso, Pendiente] |
+| Pausa 3 s | Sin cambios (00:01, 1/2) · Iniciar |
+| Fin (Lunges) | Finalizado 00:00 · 2/2 · "¡Entrenamiento completado!" · [Completado ×3] · **Iniciar deshabilitado** |
+| Clic en Iniciar deshabilitado | Sin cambios |
+| Reiniciar | Squats · Ejercicio 00:05 · 0/3 · [Pendiente ×3] · sin notificación |
 
 ---
 
@@ -546,3 +582,4 @@ Paso intermedio recomendado: `@ngrx/signals` (`signalStore` + `withMethods`), qu
 | 1.1 | 2026-11-06 | WS2: se añade la invariante de `id` único en `createWorkout` (D9), `workout.spec.ts` al plan de tests y la evidencia del dominio (§9.2). |
 | 1.2 | 2026-11-06 | WS3: el puerto `Ticker` y los tokens DI se adelantan de WS4 a WS3 (infrastructure los necesita para registrar providers). Adaptadores como clases planas con `useFactory`. Evidencia en §9.3. |
 | 1.3 | 2026-11-06 | WS4: `canStart`/`canPause` derivados de las transiciones del dominio; `load()` nunca lanza y también detiene el ticker. Evidencia en §9.4. |
+| 1.4 | 2026-11-06 | WS5: outputs renombrados a `startClick`/`pauseClick`/`resetClick`; `ExerciseItemComponent` recibe `exercise` completo; input `finished` en el timer; notas de accesibilidad; zoneless en todos los tests con TestBed; `NG0908` confirmado. Evidencia final en §9.5. |

@@ -1,3 +1,4 @@
+import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { SQUATS, aWorkout } from '../domain/testing/workout.fixtures';
 import { LoadWorkoutUseCase } from './load-workout.use-case';
@@ -7,7 +8,10 @@ import { WORKOUT_REPOSITORY } from './workout.tokens';
 describe('LoadWorkoutUseCase', () => {
   const setup = (repository: ReturnType<typeof fakeRepository>) => {
     TestBed.configureTestingModule({
-      providers: [{ provide: WORKOUT_REPOSITORY, useValue: repository }],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: WORKOUT_REPOSITORY, useValue: repository },
+      ],
     });
     return TestBed.inject(LoadWorkoutUseCase);
   };
