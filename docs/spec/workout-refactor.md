@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.2 |
+| Versión | 1.3 |
 | Estado | Aprobada para implementación |
 | Autor | Carlos Gamarra |
 | Fecha | 2026-11-06 |
@@ -289,7 +289,9 @@ export class WorkoutSessionStore {
 ```
 
 - **`Ticker` sin estado:** `start()` devuelve su propia función de parada, así que una única instancia en root sirve para cualquier número de stores.
-- **El store solo orquesta:** aplica funciones de dominio sobre un `signal`, arranca el ticker en `start` y lo para en `pause`, `reset`, al pasar a `finished` y en `DestroyRef.onDestroy` (corrige P6).
+- **El store solo orquesta:** aplica funciones de dominio sobre un `signal`, arranca el ticker en `start` (como máximo uno activo) y lo para en `pause`, `reset`, `load`, al pasar a `finished` y en `DestroyRef.onDestroy` (corrige P6).
+- **`canStart` y `canPause` no duplican reglas:** se derivan como `start(session) !== session` y `pause(session) !== session`. Así las reglas de cuándo se puede iniciar o pausar viven solo en el dominio.
+- **`load()` nunca lanza:** cualquier error del repositorio (datos inválidos, red) deja `loadState = 'error'` y `session = null` (D9).
 - **Store a nivel de container:** el estado vive y muere con la página; nada de singletons globales mutables.
 
 ### 4.6 Infrastructure
@@ -353,7 +355,7 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | WS1 | Esta spec | `docs(spec): add workout refactor specification` | ✅ Hecho |
 | WS2 | `domain/` + tests | `feat(workout-domain): …` | ✅ Hecho |
 | WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests. Incluye los **contratos** de application que infrastructure necesita: puerto `Ticker` y tokens DI | `feat(workout-infra): …` | ✅ Hecho |
-| WS4 | `application/` (use case, store) + tests | `feat(workout-app): …` | ⬜ |
+| WS4 | `application/` (use case, store) + tests | `feat(workout-app): …` | ✅ Hecho |
 | WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ⬜ |
 | WS6 | README (ejecución, arquitectura, evidencia) y actualización de §9 | `docs: …` | ⬜ |
 
@@ -401,7 +403,8 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | `infrastructure/mock-workout.repository.spec.ts` | Devuelve varios ejercicios; el primero es el baseline (Squats); datos inválidos → Promise rechazada, sin excepción síncrona. |
 | `infrastructure/interval-ticker.spec.ts` | Un tick por intervalo (`jasmine.clock`); `stop()` detiene; `stop()` idempotente; varios `start()` independientes. |
 | `infrastructure/workout.providers.spec.ts` | Los tokens resuelven a los adaptadores esperados. |
-| `application/workout-session.store.spec.ts` | Con `FakeTicker` (dispara ticks a mano) y repositorio fake: carga ok / error / vacía; flujo completo; el ticker se para en pause, reset, finished y destroy; `canStart`/`canPause`. |
+| `application/load-workout.use-case.spec.ts` | Delega en el puerto; propaga el error del repositorio. |
+| `application/workout-session.store.spec.ts` | Con `FakeTicker` (dispara ticks a mano) y repositorio fake: estado previo a la carga; carga ok / error / vacía; recarga en marcha; `start` doble crea un solo ticker; transiciones por tick (CA-3…CA-6); estados por ejercicio; el ticker se para en pause, reset, finished y destroy (con `createEnvironmentInjector` + `destroy()`); `canStart`/`canPause`. |
 | `presentation/format-seconds.spec.ts` | 0 → `00:00`; 5 → `00:05`; 75 → `01:15`. |
 | `presentation/.../exercise-item.component.spec.ts` | Etiqueta y clase CSS por estado (`setInput`). |
 | `presentation/.../workout-timer.component.spec.ts` | Muestra `mm:ss` y la fase; Iniciar/Pausar según inputs; emite `start`/`pause`/`reset` al hacer clic. |
@@ -463,7 +466,22 @@ any en domain/application/infrastructure       → 0 resultados
 campos snake_case en código de domain/application → 0 (solo aparecen en descripciones de tests que citan el reto)
 ```
 
-### 9.4 Tras WS5 (a completar en WS6)
+### 9.4 Tras WS4 (application)
+
+```text
+$ npm test
+TOTAL: 83 SUCCESS        # +18 de application
+
+# Mutation check manual sobre WorkoutSessionStore:
+no parar el ticker al finalizar        →  1 FAILED
+pause() no para el ticker              →  2 FAILED
+start() doble crea un segundo ticker   →  1 FAILED
+
+application → infrastructure | presentation → 0 resultados
+any → solo en el código legacy (se elimina en WS5)
+```
+
+### 9.5 Tras WS5 (a completar en WS6)
 
 ```bash
 npm run build
@@ -527,3 +545,4 @@ Paso intermedio recomendado: `@ngrx/signals` (`signalStore` + `withMethods`), qu
 | 1.0 | 2026-11-06 | Versión inicial. |
 | 1.1 | 2026-11-06 | WS2: se añade la invariante de `id` único en `createWorkout` (D9), `workout.spec.ts` al plan de tests y la evidencia del dominio (§9.2). |
 | 1.2 | 2026-11-06 | WS3: el puerto `Ticker` y los tokens DI se adelantan de WS4 a WS3 (infrastructure los necesita para registrar providers). Adaptadores como clases planas con `useFactory`. Evidencia en §9.3. |
+| 1.3 | 2026-11-06 | WS4: `canStart`/`canPause` derivados de las transiciones del dominio; `load()` nunca lanza y también detiene el ticker. Evidencia en §9.4. |
