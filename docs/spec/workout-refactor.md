@@ -2,8 +2,8 @@
 
 | Campo | Valor |
 |---|---|
-| Versión | 1.4 |
-| Estado | Aprobada para implementación |
+| Versión | 1.5 |
+| Estado | Implementada (WS0–WS6) |
 | Autor | Carlos Gamarra |
 | Fecha | 2026-11-06 |
 | Reto | [`docs/CHALLENGE.md`](../CHALLENGE.md) |
@@ -362,7 +362,7 @@ Cada workstream es un commit (o varios) con Conventional Commits y deja build y 
 | WS3 | `infrastructure/` (DTO, mapper, mock, ticker, providers) + tests. Incluye los **contratos** de application que infrastructure necesita: puerto `Ticker` y tokens DI | `feat(workout-infra): …` | ✅ Hecho |
 | WS4 | `application/` (use case, store) + tests | `feat(workout-app): …` | ✅ Hecho |
 | WS5 | `presentation/` + `app.config.ts` zoneless; quitar `zone.js` y el código legacy | `refactor(workout-ui): …` | ✅ Hecho |
-| WS6 | README (ejecución, arquitectura, evidencia) y actualización de §9 | `docs: …` | ⬜ |
+| WS6 | README (ejecución, arquitectura, evidencia) y actualización de §9 | `docs: …` | ✅ Hecho |
 
 ---
 
@@ -530,6 +530,22 @@ Verificación manual en navegador (`npm start`, Chrome, sin zone.js). La consola
 | Clic en Iniciar deshabilitado | Sin cambios |
 | Reiniciar | Squats · Ejercicio 00:05 · 0/3 · [Pendiente ×3] · sin notificación |
 
+### 9.6 Reproducibilidad (WS6)
+
+Clon limpio del repositorio en el commit `cd16c50` (WS5), sin `node_modules`, con Node 24.16 y npm 11.13:
+
+```text
+$ git clone … && npm ci
+added 541 packages in 20s
+
+$ npm run build
+Initial total | 127.91 kB | 38.28 kB (transfer)
+Application bundle generation complete.
+
+$ npm test
+TOTAL: 117 SUCCESS
+```
+
 ---
 
 ## 10. Extensión: microfrontends y gestión de estado (diseño)
@@ -583,3 +599,4 @@ Paso intermedio recomendado: `@ngrx/signals` (`signalStore` + `withMethods`), qu
 | 1.2 | 2026-11-06 | WS3: el puerto `Ticker` y los tokens DI se adelantan de WS4 a WS3 (infrastructure los necesita para registrar providers). Adaptadores como clases planas con `useFactory`. Evidencia en §9.3. |
 | 1.3 | 2026-11-06 | WS4: `canStart`/`canPause` derivados de las transiciones del dominio; `load()` nunca lanza y también detiene el ticker. Evidencia en §9.4. |
 | 1.4 | 2026-11-06 | WS5: outputs renombrados a `startClick`/`pauseClick`/`resetClick`; `ExerciseItemComponent` recibe `exercise` completo; input `finished` en el timer; notas de accesibilidad; zoneless en todos los tests con TestBed; `NG0908` confirmado. Evidencia final en §9.5. |
+| 1.5 | 2026-11-06 | WS6: README con ejecución, arquitectura, tests y evidencia; verificación en clon limpio (§9.6). Spec cerrada como implementada. |
